@@ -8,6 +8,7 @@ from telegram.ext import (
   MessageHandler,
   filters
 )
+import re
 
 import asyncio
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -16,43 +17,40 @@ from telegram import ReplyKeyboardMarkup
 from telegram.ext import ConversationHandler
 
 
-
 #my bot
 bot = Bot(token="6635906742:AAE30y2pQOVWP6p0SRAj-KOjNDutAJ-b8ME")
 BOT_USERNAME: Final = '@instagram_up_down_bot'
 
+# Member class
+# class Member:
+#    def __init__(self, name, balance):
+#       self.name = name
+#       self.balance = balance
+
+
 #buttons
 start_keyboard = [['Add expense', 'Balances 🌐'], ['People','Activity']]
-people_keyboard = [['Add people', 'Main menu']]
+people_keyboard = [['Add people', 'Show People'], ['Main menu']]
 cancel_keyboard = [['Cancel']]
 main_menu_keyboard = [['Main menu']]
 
-#Command answers
+##################################
+#Command methods answers
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
   markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
   await update.message.reply_text('سلام به ربات اسپلیت وایز خوش آمدید.', reply_markup=markup)
-
 
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
   markup = ReplyKeyboardMarkup(cancel_keyboard, resize_keyboard=True)
   await update.message.reply_text('کی به کی داده؟', reply_markup=markup)
     #Arash 250 to ali
   
-
-
 async def balances_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
   markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
   ali_balance = await calculate_balance('Ali')
   arash_balance = await calculate_balance('arash')
   await update.message.reply_text(f"Ali's balance: {ali_balance}  \nArash's balance: {arash_balance}", reply_markup=markup)
   
-#   ali_balance = await calculate_balance('Ali')
-#   print("Ali's balance:", ali_balance)
-
-#   # Calculate Arash's balance
-#   arash_balance = await calculate_balance('arash')
-#   print("Arash's balance:", arash_balance)
-
 
 async def people_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = ReplyKeyboardMarkup(people_keyboard, resize_keyboard=True)
@@ -67,6 +65,34 @@ async def add_people_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data['conversation_state'] = 'WAITING_FOR_PERSON_NAME'
 
 
+async def show_people_command(update: Update, context: CallbackContext):
+    people = context.user_data.get('people', [])
+    if people:
+        people_list = '\n'.join(people)
+        await update.message.reply_text(f"People:\n{people_list}")
+    else:
+        await update.message.reply_text("No people added yet.")
+
+
+#********************************************************************************
+async def activity_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  markup = ReplyKeyboardMarkup(main_menu_keyboard, resize_keyboard=True)
+  await update.message.reply_text('تکمیل نشده', reply_markup=markup)
+#********************************************************************************
+
+
+async def home_command(update: Update, context:ContextTypes.DEFAULT_TYPE):
+  markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
+  await update.message.reply_text('⬅️')
+  await update.message.reply_text('صفحه اصلی', reply_markup=markup)
+
+async def invalid_message_command(update: Update):
+   markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
+   await update.message.reply_text('Not a valid command. Choose beetwen key options', reply_markup=markup)  
+
+
+##################################
+#other methods
 async def process_new_person_name(update: Update, context: CallbackContext, name: str):
     # Add the new person to your data structure or database
     # Here, I'll assume you have a list called 'people'
@@ -81,24 +107,16 @@ async def process_new_person_name(update: Update, context: CallbackContext, name
 
     markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
     # Send a confirmation message
-    await update.message.reply_text('Person added: ' + name + '. Done!', reply_markup=markup)  
-
-async def activity_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-  markup = ReplyKeyboardMarkup(main_menu_keyboard, resize_keyboard=True)
-  await update.message.reply_text('تکمیل نشده', reply_markup=markup)
+    await update.message.reply_text('Person added: ' + name + '. Done!', reply_markup=markup) 
 
 
-async def home_command(update: Update):
-  markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
-  await update.message.reply_text('⬅️')
-  await update.message.reply_text('صفحه اصلی', reply_markup=markup)
 
 
 data = []
 async def split_add_expense(update: Update, input_expense):
   splitted_expense = input_expense.split()
   lender = splitted_expense[0]
-  borrower = splitted_expense[-1]
+  borrower = splitted_expense[3]
   price = splitted_expense[1]
 
   transaction = {
@@ -108,8 +126,9 @@ async def split_add_expense(update: Update, input_expense):
     }
   
   data.append(transaction)
-  
-  await home_command(update)
+
+  markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
+  await update.message.reply_text('Expense added.', reply_markup=markup)
 
 async def calculate_balance(user):
     balance = 0.0
@@ -131,10 +150,13 @@ async def handle_message(update: Update, context: CallbackContext):
     
     # Check the conversation state
     conversation_state = context.user_data.get('conversation_state')
+    
+    #regex for checking adding expenses
+    pattern = r"^(\w+)\s+(\d+)\s+to\s+(\w+)\s+for\s+(\w+)$"
 
     if conversation_state == 'WAITING_FOR_PERSON_NAME':
-            # Process the person's name
-            await process_new_person_name(update, context, user_message)
+        # Process the person's name
+        await process_new_person_name(update, context, user_message)
 
     else:
         if user_message == 'Add expense':
@@ -145,22 +167,26 @@ async def handle_message(update: Update, context: CallbackContext):
             await people_command(update, context)
         elif user_message == 'Add people':
             await add_people_command(update, context)
+        elif user_message == 'Show People':
+            await show_people_command(update, context)
         elif user_message == 'Activity':
             await activity_command(update, context)     
         
         elif user_message == 'Main menu' or user_message == 'Cancel':
-            await start_command(update, context)  
+            await home_command(update, context)  
+        
         
         else:
-            print('chris')
-            await split_add_expense(update, user_message)
+            if re.match(pattern, user_message, re.IGNORECASE):
+              await split_add_expense(update, user_message)
+              print('chris')
+            else:
+              await invalid_message_command(update)
+            
 
 # Error handler
 async def error(update: Update, context: CallbackContext):
   print(f'Update {update} caused error {context.error}')
-
-
-
 
 
 def main():
@@ -180,8 +206,6 @@ def main():
   # Run the bot
   app.run_polling(poll_interval=1)
   
-
-
 
 if __name__ == '__main__':
   main()
