@@ -21,12 +21,26 @@ from telegram.ext import ConversationHandler
 bot = Bot(token="6635906742:AAE30y2pQOVWP6p0SRAj-KOjNDutAJ-b8ME")
 BOT_USERNAME: Final = '@instagram_up_down_bot'
 
-# Member class
-# class Member:
-#    def __init__(self, name, balance):
-#       self.name = name
-#       self.balance = balance
 
+obj = []
+# Member class
+class Member:
+   def __init__(self, name, balance):
+      self.name = name
+      self.balance = balance
+    
+   def update_balance(self, name, amount):
+        if self.name == name:
+            self.balance += amount
+            return self.balance
+        else:
+            return "Member not found."
+   
+   def __str__(self) -> str:
+      return self.name.capitalize()+" : "+str(self.balance)
+   
+   def return_name(self) -> str:
+      return self.name.capitalize()
 
 #buttons
 start_keyboard = [['Add expense', 'Balances 🌐'], ['People','Activity']]
@@ -40,17 +54,17 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
   markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
   await update.message.reply_text('سلام به ربات اسپلیت وایز خوش آمدید.', reply_markup=markup)
 
-async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def add_expenses_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
   markup = ReplyKeyboardMarkup(cancel_keyboard, resize_keyboard=True)
-  await update.message.reply_text('کی به کی داده؟', reply_markup=markup)
-    #Arash 250 to ali
+  await update.message.reply_text('Write on this format: Lender price to Borrower for X (X is the thing that he/she bought).', reply_markup=markup)
+    #Arash 250 to ali for pizza
   
 async def balances_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
   markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
-  ali_balance = await calculate_balance('Ali')
-  arash_balance = await calculate_balance('arash')
-  await update.message.reply_text(f"Ali's balance: {ali_balance}  \nArash's balance: {arash_balance}", reply_markup=markup)
-  
+  balances_answer = ''
+  for member in obj:
+    balances_answer+=str(member)+"\n"
+  await update.message.reply_text(balances_answer, reply_markup=markup)
 
 async def people_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = ReplyKeyboardMarkup(people_keyboard, resize_keyboard=True)
@@ -66,13 +80,11 @@ async def add_people_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def show_people_command(update: Update, context: CallbackContext):
-    people = context.user_data.get('people', [])
-    if people:
-        people_list = '\n'.join(people)
-        await update.message.reply_text(f"People:\n{people_list}")
-    else:
-        await update.message.reply_text("No people added yet.")
+    member_names = ''
+    for member in obj:
+       member_names+=member.name.capitalize()+"\n"
 
+    await update.message.reply_text(member_names)
 
 #********************************************************************************
 async def activity_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -83,8 +95,8 @@ async def activity_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def home_command(update: Update, context:ContextTypes.DEFAULT_TYPE):
   markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
-  await update.message.reply_text('⬅️')
-  await update.message.reply_text('صفحه اصلی', reply_markup=markup)
+  await update.message.reply_text('⬅️', reply_markup=markup)
+  # await update.message.reply_text('صفحه اصلی', )
 
 async def invalid_message_command(update: Update):
    markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
@@ -94,16 +106,16 @@ async def invalid_message_command(update: Update):
 ##################################
 #other methods
 async def process_new_person_name(update: Update, context: CallbackContext, name: str):
-    # Add the new person to your data structure or database
-    # Here, I'll assume you have a list called 'people'
-    people = context.user_data.get('people', [])
-    people.append(name)
-    context.user_data['people'] = people
+    # name converted to lowercase for saving 
+
+    # member object
+    obj.append(Member(name.lower(), 0))
+
 
     # Reset the conversation handler state
     context.user_data['conversation_state'] = None
 
-    print(people)
+    # print(people)
 
     markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
     # Send a confirmation message
@@ -114,33 +126,32 @@ async def process_new_person_name(update: Update, context: CallbackContext, name
 
 data = []
 async def split_add_expense(update: Update, input_expense):
-  splitted_expense = input_expense.split()
-  lender = splitted_expense[0]
-  borrower = splitted_expense[3]
-  price = splitted_expense[1]
+    markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
+    
+    splitted_expense = input_expense.split()
+    lender = splitted_expense[0].lower()
+    borrower = splitted_expense[3].lower()
+    price = float(splitted_expense[1]) 
 
-  transaction = {
-        'lender': lender,
-        'price': float(price),
-        'borrower': borrower
-    }
-  
-  data.append(transaction)
+    # Find the lender and borrower in the obj list
+    lender_member = None
+    borrower_member = None
+    for member in obj:
+        if member.name == lender:
+            lender_member = member
+        elif member.name == borrower:
+            borrower_member = member
 
-  markup = ReplyKeyboardMarkup(start_keyboard, resize_keyboard=True)
-  await update.message.reply_text('Expense added.', reply_markup=markup)
+    # Check if both lender and borrower are found
+    if lender_member and borrower_member:
+        lender_member.update_balance(lender, price)
+        borrower_member.update_balance(borrower, -price)
+        await update.message.reply_text('Expense added.', reply_markup=markup)
+    else:
+        await update.message.reply_text("Lender or borrower not found. There is a problem on your add expense message.", reply_markup=markup)
 
-async def calculate_balance(user):
-    balance = 0.0
+      
 
-    for transaction in data:
-        if transaction['lender'] == user:
-            balance += transaction['price']
-            
-        if transaction['borrower'] == user:
-            balance -= transaction['price']
-        
-    return balance  
 
 #Handle message  
 async def handle_message(update: Update, context: CallbackContext):
@@ -160,7 +171,7 @@ async def handle_message(update: Update, context: CallbackContext):
 
     else:
         if user_message == 'Add expense':
-            await add_command(update, context)
+            await add_expenses_command(update, context)
         elif user_message == 'Balances 🌐':
             await balances_command(update, context)
         elif user_message == 'People':
